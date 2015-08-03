@@ -45,7 +45,7 @@ type node struct {
 	maxParams uint8
 	indices   string
 	children  []*node
-	handle    Handle
+	handle    HandleContext
 	priority  uint32
 }
 
@@ -77,7 +77,7 @@ func (n *node) incrementChildPrio(pos int) int {
 
 // addRoute adds a node with the given handle to the path.
 // Not concurrency-safe!
-func (n *node) addRoute(path string, handle Handle) {
+func (n *node) addRoute(path string, handle HandleContext) {
 	fullPath := path
 	n.priority++
 	numParams := countParams(path)
@@ -198,7 +198,7 @@ func (n *node) addRoute(path string, handle Handle) {
 	}
 }
 
-func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle) {
+func (n *node) insertChild(numParams uint8, path, fullPath string, handle HandleContext) {
 	var offset int // already handled bytes of the path
 
 	// find prefix until first wildcard (beginning with ':'' or '*'')
@@ -316,7 +316,7 @@ func (n *node) insertChild(numParams uint8, path, fullPath string, handle Handle
 // If no handle can be found, a TSR (trailing slash redirect) recommendation is
 // made if a handle exists with an extra (without the) trailing slash for the
 // given path.
-func (n *node) getValue(path string) (handle Handle, p Params, tsr bool) {
+func (n *node) getValue(path string) (handle HandleContext, ctx *Context, tsr bool) {
 walk: // Outer loop for walking the tree
 	for {
 		if len(path) > len(n.path) {
@@ -353,14 +353,18 @@ walk: // Outer loop for walking the tree
 					}
 
 					// save param value
-					if p == nil {
+					if ctx == nil {
 						// lazy allocation
-						p = make(Params, 0, n.maxParams)
+						ctx = &Context{Parameter: make(Params, 0, n.maxParams)}
 					}
-					i := len(p)
+					/* i := len(p)
 					p = p[:i+1] // expand slice within preallocated capacity
 					p[i].Key = n.path[1:]
-					p[i].Value = path[:end]
+					p[i].Value = path[:end] */
+					i := len(ctx.Parameter)
+					ctx.Parameter = ctx.Parameter[:i+1]
+					ctx.Parameter[i].Key = n.path[1:]
+					ctx.Parameter[i].Value = path[:end]
 
 					// we need to go deeper!
 					if end < len(path) {
@@ -388,14 +392,20 @@ walk: // Outer loop for walking the tree
 
 				case catchAll:
 					// save param value
-					if p == nil {
+					if ctx == nil {
 						// lazy allocation
-						p = make(Params, 0, n.maxParams)
+						ctx = &Context{Parameter: make(Params, 0, n.maxParams)}
 					}
-					i := len(p)
-					p = p[:i+1] // expand slice within preallocated capacity
-					p[i].Key = n.path[2:]
-					p[i].Value = path
+
+					i := len(ctx.Parameter)
+					ctx.Parameter = ctx.Parameter[:i+1]
+					ctx.Parameter[i].Key = n.path[2:]
+					ctx.Parameter[i].Value = path
+
+					// i := len(p)
+					// p = p[:i+1] // expand slice within preallocated capacity
+					// p[i].Key = n.path[2:]
+					// p[i].Value = path
 
 					handle = n.handle
 					return
